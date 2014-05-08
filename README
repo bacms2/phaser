@@ -1,0 +1,84 @@
+1 Introduction
+
+This documentation is intended to give a rapid introduction to the command line use of PhaseR to identify phased sRNAs from high throughput sequencing datasets. In order to do this we need to align the reads from one or more high-throughput sequencing experiments to a reference sequence. This can be done with a freely available alignment program such as PatMaN, bowtie, etc.
+
+The PhaseR algorithm uses an extension of the probability calculation proposed by Chen at al. (2007) to distinguish likely occurrences of phasing from random events. In Chenâ€™s original algorithm each position along an sRNA locus was treated as a binary variable. In other words it could only have two states, either it was occupied by the 5â€™end of an sRNA or it was not. The new algorithm innovates by using the counts of the number of sRNAs with a 5â€™ end in each position when calculating the probability for the locus. The algorithm also considers every possible sRNA in the dataset to be the start of the sRNA locus for which the end is unknown. So every possible length for that locus is tested as long as it is not bigger than a certain number of nucleotides for which there are no matching sRNAs.
+
+A matrix of probabilities is then built with one dimension corresponding to all possible phased segments ("loci") and the other to all possible registers.  Each position in the matrix is filled with the minimum probability from the hypergeometric tests performed for the different abundance thresholds. The last step consists of determining the segment, register, abundance and probability for the element in the matrix with the lowest probability. These probabilities are calculated using the hypergeometric distribution as proposed by Chen at al. (2007).
+
+2 System requirements
+
+The following software must be installed on your machine:
+
+Python 2.5+ (Python  version 3.0+ is currently unsupported)
+numpy 1.0+
+matplotlib 1.2+
+either mpmath 0.7+ or rpy2 2.0+
+The rpy2 implementation is slightly faster than the mpmath but requires the R statistical language to be installed on the same machine. The install is more complicated so, please use mpmath in the first instance.
+
+LINUX
+
+Currently, Python version 2.7 is recommended.
+
+The current versions of the required software are available:
+
+Python     - http://www.python.org/ftp/python/2.7.3/Python-2.7.3.tgz
+Numpy      - http://sourceforge.net/projects/numpy/files/NumPy/1.6.2/numpy-1.6.2.tar.gz/download
+matplotlib      - http://matplotlib.org/downloads.html
+mpmath     - http://code.google.com/p/mpmath/downloads/list
+For Linux we are recommending you use the source code versions of the software and compile them yourself. Most linux distributions provide python binaries but they might be outdated.
+
+WINDOWS
+
+Currently, Python version 2.7 is recommended.
+
+The current versions of the required software are available:
+
+Python     - http://www.python.org/download/releases/2.7.3/
+Numpy      - http://sourceforge.net/projects/numpy/files/latest/
+download?source=files
+
+matplotlib      - http://matplotlib.org/downloads.html
+mpmath     - http://code.google.com/p/mpmath/downloads/list
+For Windows we are recommending you use the 32bit version of python since windows installers for numpy and mpmath are only provided for this architecture. However, you can install the x64 version and compile the x64 libraries yourself. Please note you will need to add python to the environmental variables if you want to run it from the command line by simply typing 'python'; otherwise you will need to specify the full path to the python interpreter. 
+
+MAC OS
+
+Currently, Python version 2.7 is recommended.
+
+The current versions of the required software are available:
+
+Python     - http://www.python.org/download/releases/2.7.3/
+Numpy      - http://sourceforge.net/projects/numpy/files/latest/
+download?source=files
+
+matplotlib      - http://matplotlib.org/downloads.html
+mpmath     - http://code.google.com/p/mpmath/downloads/list
+This is the least tested installation. From our experience the major problem is related to the matplotlib which is pretty much unavailable with any of the python distributions and packet managers. Compiling from source is also not recommended since it needs a later version X gcc, and updating to a newer version might break other software previous installed on the machine. To avoid this problems we recommend install it from the OS X binaries available at the website mentioned above. Also if you are thinking in using patman for the alignments you will need to download and compile popt from source which can be obtained from http://rpm5.org/files/popt/popt-1.14.tar.gz.
+
+3 Preparation
+
+We begin by preparing our alignment file. The format can be gff2, patman or the format used by  Chen at al. (2007). We provide an example of each format in the datasets folder, as well as the reference sequences and sRNA dataset used to generate the alignment. In this example, the alignment was created using the PatMaN aligner and converted to other formats using Python. PatMaN is available from https://bioinf.eva.mpg.de/patman/. Once Patman is installed, from the command line, change to the directory where you have download the program to and run:
+
+patman -P sRNA_dataset.fa -D TAS_genomic_sequences.fa --edits=0 --gaps=0 > new_sample_alignment.patman
+The output can then been used with the PhaseR program.
+
+4 Running the PhaseR algorithm
+
+In order to run the PhaseR algorithm from the command line, change to the src directory. Here you will find two files, the PhaseR program itself and a supporting library to deal with the alignment files. You can now run the PhaseR algorithm using the datasets generated in the previous step. To run the program type:
+
+python phaser.py #INPUT_FILE #FILE_FORMAT #THRESHOLD #SRNA_SIZE #MIN_LOCUS_LENGTH #MAX_GAP'
+where the words starting with # are optional parameters, namely:
+
+#INPUT_FILE -> The name and location of the file containing the alignment data
+#FILE_FORMAT -> The file format for the alignment file, either 'chen','gff2' or 'patman'
+#THRESHOLD -> The threshold value of log(p-value) for a locus to be considered phased, cannot be higher than 0
+#SRNA_SIZE -> The size of the phasing pattern to be expected which is the same as the size of the sRNA. For the Arabidopsis TAS loci this is 21nt.
+#MIN_LOCUS_LENGTH -> The minimum size for a segment to be considered a locus. A size of 21nt, corresponding to only one sRNA, can be used but will never be considered phased. In order to speed things up, we suggest setting this value to at least 3x the size of the pattern you are searching for.
+#MAX_GAP -> The furthest apart two sRNAs can be for them to be considered part of the same locus.
+For the example provided we can simply then type:
+
+python phaser.py ../datasets/sample_alignment.gff2 gff2 -8 21 105 231
+The console will show the progress taking place. When the message â€˜All finishedâ€™ appears on the screen, you can change to the results directory. Here you will find two files, a text file with a summary of the predictions made and a multi page pdf containing several plots showing the number or sRNAs (y-axis) in each position (x-axis) along the locus. The top window shows the '+' strand and the bottom one the '-' strand. For each locus the first plot shows the complete locus and the second one the region where the algorithm detected the most significant evidence for phasing. Blue bars represent sRNAs outside of the phasing register being considered and red bars sRNAs inside the register. Please note that sRNA are always relative so always start from zero. The diamonds above represent the phased positions in the register expected to be occupied. Hollow ones represent positions with no sRNAs and filled ones positions with sRNAs matching to them. Note that sometimes the zoomed version of the plot the coordinates indicated can spawn outside the region outside the sRNA segment. This is due to the necessity of including always the 21nts after each occupied phased position. So if for example the last sRNA on the â€˜+â€™ is on a phased position and no more sRNAs are present after that the 20nt position next to it will be included on the calculation of the score and so will be present on the second plot.   
+
+If you have any trouble running the script or you need more information please contact me at bacms2@cam.ac.uk.

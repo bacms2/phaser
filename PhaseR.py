@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 """
-beta v1.1 29 April 2014
+beta v1.1 17 Jan 2015
 PhaseR: predicting small RNA components of regulatory networks
 @author: bacms2
 
@@ -38,7 +38,6 @@ under the GPL v3, See http://www.gnu.org/copyleft/gpl.html for more details.
 Please contact Bruno Santos on bacms2@cam.ac.uk for further support.
 
 Version 1.1
-
 """
 from matplotlib import use
 use('Agg')
@@ -63,6 +62,7 @@ try:
     import rpy2.rinterface as rinterface
     bolean_rpy2 = True
 except ImportError:bolean_rpy2 = False
+import argparse
 
 if bolean_rpy2: #Initialize the R interface if present
     rinterface.initr()
@@ -72,26 +72,26 @@ if bolean_rpy2: #Initialize the R interface if present
     dtPhyper = {}
 
 class alignment_node:
-    def __init__(self,name,counts,reads,coordinate):
-        """
-        self.__init__(self,zName,nCounts,zTag,coordinate)
-        Creates a new instance of srna_alignment.
-        A srna_alignment correspond to a position on the genome with a 5' end of a sRNA matching to it
-        zName <- Unique name to identify the smallRNA, its normally obtained by joining the Chromosome
+    def __init__(self,name,counts,tags,coordinate):
+        """self.__init__(self,name,counts,tags,coordinate)
+        Creates a new instance of alignment_node.
+        An alignment_node corresponds to a position on the genome with a 5' end of a sRNA matching to it
+        name <- Unique name to identify the rna tag, obtained by joining chromosome
         name with its the coordinate on the genome (ie chr1_11210)
-        nCounts <- Tuple of integers corresponding to the count numbers of both strands
-        zTags <- Tuple of strings corresponding to the tag sequences of both strands
-        coordinate <- Coordinate of the srna_alignment
+        counts <- Tuple of integers corresponding to the count numbers of both strands
+        tags <- Tuple of strings corresponding to the tag sequences of both strands
+        coordinate <- genomic coordinate of 5' end of the rna tag
         """
         self.name = name 
         self.ls_counts = counts
-        self.ls_reads = reads
+        self.ls_tags = tags
         self.coordinate = int(coordinate)
+        return
     
     def get_parameters(self):
         """
-        self.getPar(self)
-        Return the name and coordinate of the signature used to create the srna_alignment
+        self.get_parameters(self)
+        Return the name and coordinate of the rna used to create the alignment_node
         """
         lsAux = self.zname.split(',')
         return (lsAux[0],self.coordinate)
@@ -104,82 +104,86 @@ class alignment_node:
         return ('Name:%s Coord:%d Counts:%d|%d Tags:%s|%s\n' % (self.zname,self.coordinate,self.count[0],self.counts[1],self.lssequences[0],self.lssequences[1]))
         
 class alignment_graph():
-    def __init__(self,dt_reads):
-        """
-        self.__init__(self,rna_signatures)
-        Creates a new instance of Graph
+    def __init__(self,dt_tags):
+        """self.__init__(self,dt_tags)
+        Creates a new instance of alignment_graph
         A Graph corresponds to a graph representation of all the 
-        rna_signatures <- Dictionary containing all the sRNA signatures in the library
+        alignment_nodes
+        self.dt_alignment_nodes <- pyhon dictionary containing all the alignment_nodes in the graph
+        self.dt_rna_signatures  <- python dictionary containing all the rna alignments in the alignment file
+        self. unique_alignments <- Number of nodes on the graph 
         """
         self.dt_alignment_nodes = {} #store all the nodes in the graph
-        self.dt_rna_signatures = dt_reads #Store all sRNA matches 
+        self.dt_rna_signatures = dt_tags #Store all sRNA matches 
         self.unique_alignments = 0 #Size of the graph
     
-    def add_alignment_node(self,zname):
+    def add_alignment_node(self,name):
         """
-        self.add_alignment_node(self,zName)
+        self.add_alignment_node(self,name)
         add a Node to the graph
-        zName <- Unique name to identify the smallRNA, its normally obtained by joining the Chromosome
-        name with its the coordinate on the genome
-        eg. chr1_11210 
+        name <- Unique name to identify the rna tag, obtained by joining chromosome
+        name with its the coordinate on the genome (eg chr1_11210)
         """
+        #Check If node already exists return
         try:
-            #If node already exists return
-            self.dt_alignment_nodes[zname]
+            self.dt_alignment_nodes[name]
             return
         except KeyError:pass
         #Get the parameters of the node
-        coordinate = zname.split(',')[1]
+        coordinate = name.split(',')[1]
+        
         #If the coordinates are outside the chromosome return
         if coordinate <= 0:return
         
         #First get the sense signature
-        counts_forward,tag_forward = (0.0,0.0)
+        counts_forward,tag_forward = (0.0,'')
         try:
-            counts_forward = self.dt_rna_signatures[zname+',1'].count
-            tag_forward = self.dt_rna_signatures[zname+',1'].read
+            counts_forward = self.dt_rna_signatures[name+',1'].count
+            tag_forward = self.dt_rna_signatures[name+',1'].tag
         except KeyError:pass
+        
         #Repeat the same for the opposite strand
-        counts_reverse,tag_reverse = (0.0,0.0)
+        counts_reverse,tag_reverse = (0.0,'')
         try:
-            counts_reverse = self.dt_rna_signatures[zname+',-1'].count
-            tag_reverse = self.dt_rna_signatures[zname+',-1'].read
+            counts_reverse = self.dt_rna_signatures[name+',-1'].count
+            tag_reverse = self.dt_rna_signatures[name+',-1'].tag
         except KeyError:pass
-        self.dt_alignment_nodes[zname]=alignment_node(zname,(counts_forward,counts_reverse),(tag_forward,tag_reverse),coordinate)
-        #Increase the number of srna_alignments in the graph
+        
+        #Store the node on the dictionary
+        self.dt_alignment_nodes[name]=alignment_node(name,(counts_forward,counts_reverse),(tag_forward,tag_reverse),coordinate)
+        
+        #Increase the number of nodes in the graph
         self.unique_alignments+=1
 
 
     def cardinal(self):
-        """
-        self.card(self)
+        """self.card(self)
         return the number of nodes in the graph
         """
         return self.unique_alignments
        
 class locus:
-    def __init__(self,start_coord,end_coord,locus_length,read_size,chromosome = 'None'):
-        """
-        locus(self,start_coord,end_coord,locus_length,read_size)
+    def __init__(self,start_coord,end_coord,locus_length,tag_length ,chromosome = 'None'):
+        """locus(self,start_coord,end_coord,locus_length,tag_length)
         Create a new instance of the locus class
         start_coord <- The start coordinate of the locus on the genome
         end_coord <- The end coordinate of the locus on the genome
         locus_length <- The length of the locus
-        read_size <- The size class of sRNAs being tested
+        tag_length  <- The size class of sRNAs being tested
         chromosome <- Optional argument to define the chromosome name
         Note that the length of the locus will always be higher than the distance between
-        their start and end coordinates because two rows of zeros are added to the rigth
+        their start and end coordinates because two rows of zeros are added to the right
         and left extremes of the locus for computation purposes
         """      
         self.start_coord = start_coord
         self.end_coord = end_coord
         self.chromosome = chromosome
-        self.forward_reads = locus_length*[0]
+        self.forward_tags = locus_length*[0]
         self.forward_counts = zeros(locus_length,dtype='Float64')
-        self.reverse_reads = locus_length*[0]
+        self.reverse_tags = locus_length*[0]
         self.reverse_counts = zeros(locus_length,dtype='Float64')
         self.locus_length = locus_length
-        self.read_size = read_size
+        self.tag_length  = tag_length 
         self.p_value = 0.0
         self.phased_region_indexes = (0,0)
         self.phased_counts = 0
@@ -190,15 +194,15 @@ class locus:
         """
         #get repeated position on forward strand
         items = defaultdict(list)
-        for i,item in enumerate(self.forward_reads):items[item].append(i)
+        for i,item in enumerate(self.forward_tags):items[item].append(i)
         indexes = []
         for item, locus in items.iteritems():
             if len(locus) > 1 and item!=0:indexes.extend(locus)
         self.forward_counts[indexes]=0
         
-        #get repeated position on anti sense strand  
+        #get repeated position on reverse strand  
         for key in items.iterkeys():items[key] = []
-        for i,item in enumerate(self.reverse_reads):items[item].append(i)
+        for i,item in enumerate(self.reverse_tags):items[item].append(i)
         indexes =[]
         for item, locus in items.iteritems():
             if len(locus) > 1 and item!=0:indexes.extend(locus)
@@ -209,15 +213,17 @@ class locus:
         """
         self.hypergeometric(self,left_index,rigth_index)
         Performs the hypergeometric test for the locus between [left_index,rigth_index[ for
-        all the count number in phase positions and return the minimum p-Value
-        left_index<-Integer indicating the left position on the array
-        rigth_index <-Integer indicating the right position on the array
+        all the count values in phased positions and return the minimum p-Value
+        left_index <- positive integer indicating the left position on the array
+        rigth_index <- positive integer indicating the right position on the array
         """
-        #Create the subarray to test
+        #Create the subarray to test for phasing
         reverse_counts = self.reverse_counts[left_index-2:right_index-2]
+        
         #Test to make sure no mistake is happening with the indexes
         if left_index<0 or right_index<0: raise Exception('Indexes cannot be lower than zero')
         if len(reverse_counts)!= len(self.forward_counts[left_index:right_index]):raise Exception('Sense and Anti sense have different lengths')
+        
         #Stack both strands
         locus_strand = hstack([self.forward_counts[left_index:right_index],reverse_counts[::-1]])
         
@@ -225,17 +231,17 @@ class locus:
         locus_length = len(locus_strand)
         
         #Get the indexes of Phased positions
-        phased_index=arange(0,locus_length,self.read_size)
+        phased_index=arange(0,locus_length,self.tag_length )
         #Get and array with only the Phased Positions
         phased_strand =locus_strand[phased_index]
         #Get the unique values in the array of Phased counts
         phased_counts = unique(phased_strand[phased_strand>0])
 
-        #Caculate the number of phase and non phase positions in the locus
-        phased_positions_total = locus_length/self.read_size
-        non_phased_positions_total = (locus_length-1)-(locus_length/self.read_size-1) 
+        #Calculate the number of phase and non phase positions in the locus
+        phased_positions_total = locus_length/self.tag_length 
+        non_phased_positions_total = (locus_length-1)-(locus_length/self.tag_length -1) 
         
-        #Do a standard call of lphyper to increase speed
+        #Do a standard call of r_hyper to increase speed
         if bolean_rpy2:r_phyper = self.r_phyper
         else: mhyper = self.mhyper
         
@@ -243,7 +249,7 @@ class locus:
         locus_strand = locus_strand[locus_strand>0]
         locus_total_counts = locus_strand.sum()
         
-        #Initialize the p-Value to zero
+        #Initialise the p-Value to zero
         p_value = 0
         phased_positions_occupied,total_positions_occupied=0,0
         for count in phased_counts:
@@ -262,7 +268,7 @@ class locus:
     
     
     def mhyper(self,q,m,n,k):
-        u = min(self.read_size,n)-1
+        u = min(self.tag_length ,n)-1
         A = binomial(m,q)*binomial(n,k-q)
         B = hyper([1,q-k,q-m],[1+q,1-k+n+q], 1)
         C = -binomial(m,1+u)*binomial(n,k-1-u)
@@ -270,11 +276,9 @@ class locus:
         return mathlog(float((A*B + C*D) / binomial(m+n, k)))
     
     def r_phyper(self,q,m,n,k):
-        """
-        self.phyper(self,q,m,n,k)
-        Calculate p-value using R function phyper from rpy2 low-level
-        interface. 
-        "R Documentation
+        """self.r_phyper(self,q,m,n,k)
+        Calculate p-value using R function phyper from rpy2 low-levelinterface. 
+        R Documentation
         phyper(q, m, n, k, lower.tail = TRUE, log.p = FALSE)
         q: vector of quantiles representing the number of white balls
             drawn without replacement from an urn which contains both
@@ -285,7 +289,7 @@ class locus:
         log.p: logical; if TRUE, probabilities p are given as log(p).
         lower.tail: logical; if TRUE (default), probabilities are P[X <= x],
             otherwise, P[X > x].
-        "
+        
         """
         phyper_q = SexpVector([q,], rinterface.INTSXP)
         phyper_m = SexpVector([m,], rinterface.INTSXP)
@@ -294,45 +298,44 @@ class locus:
         return phyper(phyper_q,phyper_m,phyper_n,phyper_k,**myparams)[0]
         
     def plot(self,screen_display=False,whole_locus=True):
+        """self.plot(self,display=False,whole_locus=True)
+        display <- boolean flag to control whether a locus should be displayed on the screen
+        whole_locus <- boolean flag can be used to plot the whole locus or just the most significant part
+        Plot the number of signatures in the sense and anti sense strand for the current locus.
         """
-        self.plot(self,display=False,whole=True)
-        whole_locus <- Flag can be used to plot the whole locus or just the most significant part
-        Plot the number of signatures in the sense and anti sense 
-        strand for the current locus.
-        """
+        #Flag the strand to be printed as the forward one 
         forward = True
         
         #Create a figure object
         fig = pylab.figure(figsize=(16,9),dpi=160)
         
-        
+        #Iterate over each strand on the locus 
         for locus_strand in [self.forward_counts,self.reverse_counts]:        
             
             #Define Patch objects for the legend
             non_phased_positions = Patch(edgecolor='b', facecolor='b')        
             phased_positions = Patch(edgecolor='r', facecolor='r')
             
-            
             #Plot strand
             if whole_locus:#Plot the whole strand
                 #Define the title to be shown on the plot
                 pylab.suptitle('%s:%d..%d with log p-value = %.2f' % (self.chromosome,self.start_coord,self.end_coord,self.p_value),fontsize=18,x=0.39)
                 #Remove the extra elements from the sense strand
-                locus_strand = locus_strand[self.read_size:-self.read_size]
+                locus_strand = locus_strand[self.tag_length :-self.tag_length ]
                 #get the first position in phase
-                first_position = self.phased_region_indexes[0]-self.phased_region_indexes[0]/self.read_size*self.read_size
+                first_position = self.phased_region_indexes[0]-self.phased_region_indexes[0]/self.tag_length *self.tag_length 
                 if not forward: first_position=first_position-3
                 #Get the positions that should contain phased sRNAs
-                phased_positions_index = arange(first_position,len(locus_strand),self.read_size)
+                phased_positions_index = arange(first_position,len(locus_strand),self.tag_length )
                 
             else: #Plot only the most significant region
                 #Define the title to be shown on the plot
-                pylab.suptitle('Most significant region on phased sRNA loci in %s:%d..%d with log p-value = %.2f' % (self.chromosome,self.start_coord+self.phased_region_indexes[0]-self.read_size,self.start_coord+self.phased_region_indexes[1]-self.read_size,self.p_value),fontsize=12,x=0.45)
+                pylab.suptitle('Most significant region on phased sRNA loci in %s:%d..%d with log p-value = %.2f' % (self.chromosome,self.start_coord+self.phased_region_indexes[0]-self.tag_length ,self.start_coord+self.phased_region_indexes[1]-self.tag_length ,self.p_value),fontsize=12,x=0.45)
                 #Remove the extra elements from the sense strand
                 locus_strand = locus_strand[self.phased_region_indexes[0]:self.phased_region_indexes[1]]
                 #Get the positions that should contain phased sRNAs
-                if forward: phased_positions_index = arange(0,len(locus_strand),self.read_size)
-                else: phased_positions_index = arange(self.read_size-3,len(locus_strand),self.read_size)
+                if forward: phased_positions_index = arange(0,len(locus_strand),self.tag_length )
+                else: phased_positions_index = arange(self.tag_length -3,len(locus_strand),self.tag_length )
             
             #Plot title and legend for the figure
             pylab.figlegend([phased_positions,non_phased_positions],['Phased positions','Out of phase positions'],'upper right',prop={'size':8})
@@ -359,23 +362,29 @@ class locus:
             
             #Plot the bars corrresponding to whole the locus
             pylab.bar(range(len(locus_strand)),locus_strand,color='b',width=1.0,edgecolor='b')
+            
             #Plot the phased positions bars
             pylab.bar(phased_positions_index,locus_strand[phased_positions_index],color='r',width=2,edgecolor='r',alpha=1,align='center')
+            
             #Compute the position where to place the markers of phased positions
             try:yaxis_pos = max(locus_strand)/3.0*2 
             except ValueError:yaxis_pos = 0
+            
             #Plot the expected phased positions
             try:pylab.scatter(phased_positions_index, [yaxis_pos]*len(phased_positions_index), marker='d', color='white',edgecolor='black')
             except ValueError:pass
+            
             #Plot the occupied phased positions
             pylab.scatter(phased_positions_occupied, [yaxis_pos]*len(phased_positions_occupied),s=40,marker='d',color='r',edgecolor='black')
+            
             #Try to set the axis 
             try:pylab.axis([0,len(locus_strand),0,max(locus_strand)])
             except ValueError:pass
             
+            #Flag the strand to be printed as the reverse one 
             forward=False
             
-            
+        #If display on the screen is required     
         if screen_display:
             pylab.show()
             pylab.close()
@@ -383,16 +392,16 @@ class locus:
         return fig
 
 class alignment_file_manager:
-    def __init__(self,rna_signatures,read_size):
+    def __init__(self,rna_signatures,tag_length ):
         """
-        libraryManager(self,rna_signatures,read_size)
+        libraryManager(self,rna_signatures,tag_length )
         rna_signatures <- Dictionary containing signature objects
-        read_size <- Size class of sRNAs
+        tag_length  <- Size class of sRNAs
         Create a new instance of the libraryManager
         """
         self.graph = alignment_graph(rna_signatures) #Instantiate the graph
         self.scc = [] #Will be used to store the Strong Connected Components
-        self.read_size = read_size
+        self.tag_length  = tag_length 
         self.alignment_results = rna_signatures#Dictionary containing the srna alignments 
         self.dt_locus = {} #store the results to be used in iPython 
         self.p_values_list = [] #store the p-values to be used for debug
@@ -451,13 +460,13 @@ class alignment_file_manager:
         locus_length = int(scc[-1].split(',')[1])-int(scc[0].split(',')[1])+1
         
         #Create the locus object 
-        temp_locus = locus(int(scc[0].split(',')[1]),int(scc[-1].split(',')[1]),locus_length+2*self.read_size,self.read_size)
+        temp_locus = locus(int(scc[0].split(',')[1]),int(scc[-1].split(',')[1]),locus_length+2*self.tag_length ,self.tag_length )
         temp_locus.chromosome,coordinate = scc[0].split(',')
         coordinate = int(coordinate)
         for node_name in scc:
             node = self.graph.dt_alignment_nodes[node_name]
-            temp_locus.forward_counts[node.coordinate-coordinate+self.read_size],temp_locus.reverse_counts[node.coordinate-coordinate+self.read_size] = node.ls_counts
-            temp_locus.forward_reads[node.coordinate-coordinate+self.read_size],temp_locus.reverse_reads[node.coordinate-coordinate+self.read_size] = node.ls_reads
+            temp_locus.forward_counts[node.coordinate-coordinate+self.tag_length ],temp_locus.reverse_counts[node.coordinate-coordinate+self.tag_length ] = node.ls_counts
+            temp_locus.forward_tags[node.coordinate-coordinate+self.tag_length ],temp_locus.reverse_tags[node.coordinate-coordinate+self.tag_length ] = node.ls_tags
         temp_locus.mask_repeats()
         return temp_locus
         
@@ -500,15 +509,15 @@ class alignment_file_manager:
             #Creates a boolean variable to flag if the locus is significant or not
             locus_is_phased = False 
             #Start iterating over each position on the locus as a potential start site for phasing
-            for left_index in xrange(2,loc.locus_length-self.read_size+2):
-                #If the first node has no reads on phased positions ignore this walk
-                if loc.forward_counts[left_index]==0 and left_index+self.read_size-3<loc.locus_length and loc.reverse_counts[left_index+self.read_size-3]==0:continue
+            for left_index in xrange(2,loc.locus_length-self.tag_length +2):
+                #If the first node has no tags on phased positions ignore this walk
+                if loc.forward_counts[left_index]==0 and left_index+self.tag_length -3<loc.locus_length and loc.reverse_counts[left_index+self.tag_length -3]==0:continue
                 #Start iterate over potential end positions for phasing
-                for right_index in xrange(left_index+self.read_size,loc.locus_length,self.read_size):
+                for right_index in xrange(left_index+self.tag_length ,loc.locus_length,self.tag_length ):
                     #if the locus length is smaller than the minimum size for the locus ignore it
                     if right_index-left_index+1<locus_minimum_length:continue
                     #If the new locus as no sRNAs in the end positions ignore this walk 
-                    if loc.forward_counts[right_index-self.read_size]==0 and loc.reverse_counts[right_index-3]==0:continue
+                    if loc.forward_counts[right_index-self.tag_length ]==0 and loc.reverse_counts[right_index-3]==0:continue
                     
                     #Get the p_value for this segment of the locus
                     p_value = loc.phaser(left_index,right_index)[0]
@@ -523,7 +532,7 @@ class alignment_file_manager:
                 
                 coordinate= scc[0].split(',')[1]    
                 counts = loc.phased_counts
-                locus_values = [str(loc.p_value),loc.chromosome,str(loc.phased_region_indexes[0]+int(coordinate)-int(self.read_size)),str(loc.phased_region_indexes[1]+int(coordinate)-int(self.read_size)),counts]
+                locus_values = [str(loc.p_value),loc.chromosome,str(loc.phased_region_indexes[0]+int(coordinate)-int(self.tag_length )),str(loc.phased_region_indexes[1]+int(coordinate)-int(self.tag_length )),counts]
             elif loc.p_value>=float(locus_values[0]):locus_values=[str(loc.p_value),str(loc.chromosome),str(loc.start_coord),str(loc.end_coord)]
             
             if loc.p_value<=fThreshold:locus_is_phased=True
@@ -554,10 +563,10 @@ class alignment_file_manager:
         """
         chromosome,coordinate= scc[0].split(',')
         file_handle.write('Identified sRNA locus in %s from position %s to %i\n' % (chromosome,loc.start_coord,loc.end_coord))
-        file_handle.write('\tPhased detected from position %s to %i\n' % (loc.phased_region_indexes[0]+int(coordinate)-int(self.read_size),loc.phased_region_indexes[1]+int(coordinate)-int(self.read_size)))
+        file_handle.write('\tPhased detected from position %s to %i\n' % (loc.phased_region_indexes[0]+int(coordinate)-int(self.tag_length ),loc.phased_region_indexes[1]+int(coordinate)-int(self.tag_length )))
         file_handle.write('\tLog p-Value = %f\n' % loc.p_value)
         file_handle.write('\tTo plot this locus type: manager.dtlocus[\'%s\'].plot()\n' % scc[0])
-        file_handle.write('\tThe coordinates in the graph will be:%i to %i\n' % (loc.phased_region_indexes[0]-self.read_size,loc.phased_region_indexes[1]-int(self.read_size)))
+        file_handle.write('\tThe coordinates in the graph will be:%i to %i\n' % (loc.phased_region_indexes[0]-self.tag_length ,loc.phased_region_indexes[1]-int(self.tag_length )))
         file_handle.write('%s\n' % ('#'*74))
         return
         
@@ -566,69 +575,47 @@ if __name__=='__main__':
     print ctime()
     print 'Running Phased RNA identification method (PhaseR) '
     start = time()
-    #check whther the user input enough parameters 
-    if len(argv)<7:exit('Not enough parameters for the run\nPlease refer to the documentation for more information')
-    
-    #Input file
-    if path.isfile(argv[1]):input_file_path = argv[1]
-    else: exit('Input file not found %s' % argv[1])
-    
-    #Format of the alignment file
-    if argv[2] in ('default','patman','gff'):file_format = argv[2]
-    else: exit('File format not recognized. File needs to be \'default\', \'gff\' or \'patman\'')
-    
-    #P-value to be used
-    try:p_value_treshold = float(argv[3])
-    except ValueError: exit("###ERROR### log p-value needs to a negative float")
-    if p_value_treshold>0:exit("###ERROR### log p-value needs to a negative float")
-    
-    #The individual size of each siRNA
-    try:srna_size = int(argv[4])
-    except ValueError: exit("###ERROR### sRNA size needs to be a positive integer")
-    if srna_size<0:exit("###ERROR### sRNA size needs to be a positive integer")
-    
-    #Minimum length of locus
-    try:locus_minimum_length = int(argv[5])
-    except ValueError: exit("###ERROR### Minimum length of the locus needs to be apositive integer")
-    if locus_minimum_length<0: exit("###ERROR### Minimum length of the locus needs to be a positive integer")
- 
-    #Maximum gap 
-    try:maximum_gap = int(argv[6])
-    except ValueError: exit("###ERROR### Maximum srna gap needs to be a positive integer")
-    if maximum_gap<0: exit("###ERROR### Maximum srna gap needs to be a positive integer")
-    
+    parser = argparse.ArgumentParser(description='PhaseR:Phased RNA identification method')
+    parser.add_argument('input_file', type=argparse.FileType('r'),help='sRNA aligment file in bam,gff,patman or default format')
+    parser.add_argument('-f','--file_format',type=str,default='bam',choices=('bam','patman','gff','chen'),help='File format of input file, default is bam')
+    parser.add_argument('-t','--log_p_value',type = float, default = -10.0, help='threshold of maximum log p_value to report')
+    parser.add_argument('-s','--srna_size',type = int, default = 21, help='Size of sRNA and phasing distance to search')
+    parser.add_argument('-l','--minimum_length',type=int, default = 105, help='Minimum length of loci to search for phasing. Improves performance by ignoring too short loci')
+    parser.add_argument('-g','--gap',type=int, default = 231, help= 'Maximum distance between two sRNAs to still be considered on the same locus')
+    parser.add_argument('--pdf',type = bool, default = False, help = 'Produce graphical output in pdf format')
+    args = parser.parse_args()
     
     #Getting the output information
     #Reading the input files
-    file_manager = alignment_file(input_file_path,file_format,srna_size)
+    file_manager = alignment_file(args.input_file,args.file_format,args.srna_size)
     print 'Number of rna signatures',len(file_manager.rna_signatures)
     print 'Reading the input file took:%f' % (time()-start)
-    sample_name = input_file_path.split('/')[-1]
+    sample_name = args.input_file.split('/')[-1]
     
     #Open file to store the phasing loci
-    output_file_path = '../results/%s_%d_%s_phasing' % (sample_name,srna_size,p_value_treshold)
+    output_file_path = '../results/%s_%d_%s_phasing' % (sample_name,args.srna_size,args.log_p_value)
     if path.isfile(output_file_path+'.txt'):print '###Warning###:Output file exists and will be overwritten'
     if path.isfile(output_file_path+'.pdf'):print '###Warning###:pdf file exists and will be overwritten'
     
     #Print all the information to the user
     print
     print 'Parameters to be used will be:'
-    print 'Input File->%s' % input_file_path
+    print 'Input File->%s' % args.input_file
     print 'Output File -> %s' % output_file_path
-    print 'Length of Phased siRNAs:%d' % srna_size
-    print 'P-value:%f'% p_value_treshold
+    print 'Length of Phased siRNAs:%d' % args.srna
+    print 'P-value:%f'% args.log_p_value
     print 'Number of distinct sRNAs used:%d' % len(file_manager.rna_signatures)
-    print 'Minimum length for locus: %d' % locus_minimum_length
-    print 'Maximum gap length between sRNAs: %d' % maximum_gap
+    print 'Minimum length for locus: %d' % args.minimum_length
+    print 'Maximum gap length between sRNAs: %d' % args.gap
     print 
     #Creating the nodes
-    manager = alignment_file_manager(file_manager.rna_signatures,srna_size)
+    manager = alignment_file_manager(file_manager.rna_signatures,args.srna_size)
     astart = time()
-    manager.create_graph(maximum_gap)
+    manager.create_graph(args.gap)
     print 'Nodes Created\nCreating nodes took:%fs' % (time()-astart)
     print 
     astart = time()
-    manager.compute_significance(p_value_treshold,locus_minimum_length,output_file_path,write_pdf=True)
+    manager.compute_significance(args.log_p_value,args.minimum_length,output_file_path,write_pdf=True)
     #manager.computeSignificance_fixed_lenght(nThreshold,locus_minimum_length,zfOutput,bPdf=True,method='bphase')
     print 'Computing significance took:%fs' % (time()-astart)
     print 'All finished'

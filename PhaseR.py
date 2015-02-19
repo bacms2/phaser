@@ -559,7 +559,7 @@ class alignment_file_manager:
         """ 
         writeOutput(self,handle,scc,loc)
         Write a matrix with the p-values for the locus and a file 
-        with a summary of the results
+        with a summary of the results 
         """
         chromosome,coordinate= scc[0].split(',')
         file_handle.write('Identified sRNA locus in %s from position %s to %i\n' % (chromosome,loc.start_coord,loc.end_coord))
@@ -576,7 +576,7 @@ if __name__=='__main__':
     print 'Running Phased RNA identification method (PhaseR) '
     start = time()
     parser = argparse.ArgumentParser(description='PhaseR:Phased RNA identification method')
-    parser.add_argument('input_file', type=argparse.FileType('r'),help='sRNA aligment file in bam,gff,patman or default format')
+    parser.add_argument('input_file', type=str,help='sRNA aligment file in bam,gff,patman or default format')
     parser.add_argument('-f','--file_format',type=str,default='bam',choices=('bam','patman','gff','chen'),help='File format of input file, default is bam')
     parser.add_argument('-t','--log_p_value',type = float, default = -10.0, help='threshold of maximum log p_value to report')
     parser.add_argument('-s','--srna_size',type = int, default = 21, help='Size of sRNA and phasing distance to search')

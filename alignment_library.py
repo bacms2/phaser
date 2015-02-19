@@ -34,7 +34,7 @@ class alignment_file():
         with all the tags. Each value of the map is an  rna_signature 
         object.
         zfInput -> Path to the input file
-        nSize -> Size os sRNAs to search for
+        nSize -> Size os sRNAs to search for 
         fFormat -> The format of the alignment file, if not given uses
         the same one described in Ho-Ming Chen Paper PNAS2007"""
         self.rna_signatures = {}
@@ -84,8 +84,8 @@ class alignment_file():
                     zstrand = convert[alignment.iv.strand]
                     ztag = str(alignment.read.seq)
                     if len(ztag)==tag_size:
-                        try:self.rna_signatures[zchr+','+str(zstart)+','+zstrand].nCounts+=float(1.0)
-                        except KeyError:self.rna_signatures[zchr+','+str(zstart)+','+zstrand]=(zchr,zstart,zstrand,ztag,1.0,tag_size)
+                        try:self.rna_signatures[zchr+','+str(zstart)+','+zstrand].count+=1
+                        except KeyError:self.rna_signatures[zchr+','+str(zstart)+','+zstrand]=(zchr,zstart,zstrand,ztag,1,tag_size)
         handle.close()
         return
             

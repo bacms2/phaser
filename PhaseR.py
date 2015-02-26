@@ -45,7 +45,7 @@ use('Agg')
 from alignment_library import alignment_file
 from numpy import zeros,hstack,arange,log,unique
 from time import time,ctime
-from sys import argv,exit
+from sys import exit
 from os import path
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.patches import Patch
@@ -559,7 +559,7 @@ class alignment_file_manager:
         """ 
         writeOutput(self,handle,scc,loc)
         Write a matrix with the p-values for the locus and a file 
-        with a summary of the results 
+        with a summary of the results
         """
         chromosome,coordinate= scc[0].split(',')
         file_handle.write('Identified sRNA locus in %s from position %s to %i\n' % (chromosome,loc.start_coord,loc.end_coord))
@@ -583,17 +583,19 @@ if __name__=='__main__':
     parser.add_argument('-l','--minimum_length',type=int, default = 105, help='Minimum length of loci to search for phasing. Improves performance by ignoring too short loci')
     parser.add_argument('-g','--gap',type=int, default = 231, help= 'Maximum distance between two sRNAs to still be considered on the same locus')
     parser.add_argument('--pdf',type = bool, default = False, help = 'Produce graphical output in pdf format')
+    parser.add_argument('-o','--output_dir', type=str,default = './', help='Folder where results are going to be written to, default is the current directory')
     args = parser.parse_args()
     
-    #Getting the output information
+    #Check input file exists
+    if not path.isfile(args.input_file):exit('No such file:%s' % args.input_file)
     #Reading the input files
-    file_manager = alignment_file(args.input_file,args.file_format,args.srna_size)
+    file_manager = alignment_file(args.input_file,args.srna_size,args.file_format)
     print 'Number of rna signatures',len(file_manager.rna_signatures)
     print 'Reading the input file took:%f' % (time()-start)
     sample_name = args.input_file.split('/')[-1]
     
     #Open file to store the phasing loci
-    output_file_path = '../results/%s_%d_%s_phasing' % (sample_name,args.srna_size,args.log_p_value)
+    output_file_path = '%s/%s_%d_%s_phasing' % (args.output_dir,sample_name,args.srna_size,args.log_p_value)
     if path.isfile(output_file_path+'.txt'):print '###Warning###:Output file exists and will be overwritten'
     if path.isfile(output_file_path+'.pdf'):print '###Warning###:pdf file exists and will be overwritten'
     
@@ -602,7 +604,7 @@ if __name__=='__main__':
     print 'Parameters to be used will be:'
     print 'Input File->%s' % args.input_file
     print 'Output File -> %s' % output_file_path
-    print 'Length of Phased siRNAs:%d' % args.srna
+    print 'Length of Phased siRNAs:%d' % args.srna_size
     print 'P-value:%f'% args.log_p_value
     print 'Number of distinct sRNAs used:%d' % len(file_manager.rna_signatures)
     print 'Minimum length for locus: %d' % args.minimum_length
